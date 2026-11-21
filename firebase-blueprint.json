@@ -1,0 +1,261 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private SPASHTA user profile, preferences, and clarity brick totals.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "age": {
+          "type": "number"
+        },
+        "isMinor": {
+          "type": "boolean"
+        },
+        "guardianEmail": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "guardianConsentGiven": {
+          "type": "boolean"
+        },
+        "isEmailVerified": {
+          "type": "boolean"
+        },
+        "totalBricksEarned": {
+          "type": "number"
+        },
+        "joinedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "preferences": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "uid",
+        "fullName",
+        "email",
+        "age",
+        "isMinor",
+        "isEmailVerified",
+        "totalBricksEarned",
+        "joinedAt",
+        "preferences"
+      ]
+    },
+    "HouseProject": {
+      "title": "HouseProject",
+      "description": "A user's sanctuary house construction project and completed My City buildings.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "houseType": {
+          "type": "string",
+          "enum": [
+            "cozy-cottage",
+            "modern-glass",
+            "treehouse",
+            "castle",
+            "beach-house",
+            "mountain-cabin",
+            "contemporary-villa"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "bricksUsed": {
+          "type": "number"
+        },
+        "totalBricksRequired": {
+          "type": "number"
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "foundation",
+            "walls",
+            "windows-doors",
+            "roof",
+            "interior",
+            "landscaping",
+            "completed"
+          ]
+        },
+        "percentage": {
+          "type": "number"
+        },
+        "startedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "completedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "reflectionLog": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "houseType",
+        "name",
+        "bricksUsed",
+        "totalBricksRequired",
+        "stage",
+        "percentage",
+        "startedAt",
+        "reflectionLog"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A persisted conversation turn between the user and SPASHTA.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sender": {
+          "type": "string",
+          "enum": ["user", "spashta"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "formattedTime": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["friend", "soulmate", "guide"]
+        },
+        "reactions": {
+          "type": "array"
+        },
+        "brickAwarded": {
+          "type": "object"
+        }
+      },
+      "required": ["id", "userId", "sender", "text", "timestamp", "formattedTime", "mode"]
+    },
+    "MoodRecord": {
+      "title": "MoodRecord",
+      "description": "A user's emotional reflection and wellbeing check-in record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "dateStr": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "mood": {
+          "type": "string",
+          "enum": [
+            "joyful",
+            "peaceful",
+            "reflective",
+            "overwhelmed",
+            "anxious",
+            "hopeful",
+            "tired",
+            "clarified"
+          ]
+        },
+        "intensity": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "source": {
+          "type": "string",
+          "enum": ["self_checkin", "chat_reflection"]
+        },
+        "tags": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "userId", "timestamp", "dateStr", "mood", "intensity", "source", "tags"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private profile and preferences for an authenticated user."
+    },
+    "/users/{userId}/houses/{houseId}": {
+      "schema": { "$ref": "#/entities/HouseProject" },
+      "description": "User's active and completed sanctuary houses."
+    },
+    "/users/{userId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "User's encrypted-in-transit private chat messages with SPASHTA."
+    },
+    "/users/{userId}/moods/{moodId}": {
+      "schema": { "$ref": "#/entities/MoodRecord" },
+      "description": "User's private mood check-in history."
+    }
+  }
+}

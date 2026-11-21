@@ -1,0 +1,6 @@
+{
+  "name": "SPASHTA — A Little Clarity. A World of Possibilities.",
+  "description": "A little clarity. A world of possibilities. AI-powered companion to express yourself, understand emotions, earn Clarity Bricks, build your personal city, and track moods.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

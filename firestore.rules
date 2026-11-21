@@ -1,0 +1,361 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isVerifiedOwner(userId) {
+      return isEmailVerified() && request.auth.uid == userId;
+    }
+
+    function isValidPreferences(prefs) {
+      return prefs is map
+        && prefs.keys().hasAll([
+          'ambientSoundEnabled',
+          'ambientSoundType',
+          'ambientVolume',
+          'reducedMotion',
+          'guardianWellbeingCheckin'
+        ])
+        && prefs.ambientSoundEnabled is bool
+        && prefs.ambientSoundType in ['cafe', 'rain', 'forest', 'chimes', 'none']
+        && prefs.ambientVolume is number && prefs.ambientVolume >= 0 && prefs.ambientVolume <= 1
+        && prefs.reducedMotion is bool
+        && prefs.guardianWellbeingCheckin is bool
+        && (!('autoMoodTrackingEnabled' in prefs) || prefs.autoMoodTrackingEnabled is bool)
+        && (!('preferredLanguage' in prefs) || (prefs.preferredLanguage is string && prefs.preferredLanguage.size() <= 16))
+        && (!('rememberedContext' in prefs) || (prefs.rememberedContext is list && prefs.rememberedContext.size() <= 30));
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'fullName',
+          'email',
+          'age',
+          'isMinor',
+          'isEmailVerified',
+          'totalBricksEarned',
+          'joinedAt',
+          'preferences'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'fullName',
+          'email',
+          'age',
+          'isMinor',
+          'guardianEmail',
+          'guardianConsentGiven',
+          'isEmailVerified',
+          'totalBricksEarned',
+          'joinedAt',
+          'updatedAt',
+          'preferences'
+        ])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.age is number && data.age >= 10 && data.age <= 120
+        && data.isMinor is bool
+        && (!('guardianEmail' in data) || (data.guardianEmail is string && data.guardianEmail.size() <= 200))
+        && (!('guardianConsentGiven' in data) || data.guardianConsentGiven is bool)
+        && data.isEmailVerified is bool && data.isEmailVerified == true
+        && data.totalBricksEarned is number && data.totalBricksEarned >= 0 && data.totalBricksEarned <= 100000
+        && data.joinedAt is string && data.joinedAt.size() >= 1 && data.joinedAt.size() <= 64
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64))
+        && isValidPreferences(data.preferences);
+    }
+
+    function isValidHouseProject(data, userId, houseId) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'houseType',
+          'name',
+          'bricksUsed',
+          'totalBricksRequired',
+          'stage',
+          'percentage',
+          'startedAt',
+          'reflectionLog'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'houseType',
+          'name',
+          'bricksUsed',
+          'totalBricksRequired',
+          'stage',
+          'percentage',
+          'startedAt',
+          'completedAt',
+          'reflectionLog'
+        ])
+        && isValidId(data.id)
+        && data.id == houseId
+        && isValidId(data.userId)
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.houseType in [
+          'cozy-cottage',
+          'modern-glass',
+          'treehouse',
+          'castle',
+          'beach-house',
+          'mountain-cabin',
+          'contemporary-villa'
+        ]
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.bricksUsed is number && data.bricksUsed >= 0 && data.bricksUsed <= 1000
+        && data.totalBricksRequired is number && data.totalBricksRequired >= 1 && data.totalBricksRequired <= 100
+        && data.stage in [
+          'foundation',
+          'walls',
+          'windows-doors',
+          'roof',
+          'interior',
+          'landscaping',
+          'completed'
+        ]
+        && data.percentage is number && data.percentage >= 0 && data.percentage <= 100
+        && data.startedAt is string && data.startedAt.size() >= 1 && data.startedAt.size() <= 64
+        && (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 64))
+        && data.reflectionLog is list && data.reflectionLog.size() <= 50
+        && (data.reflectionLog.size() == 0 || (data.reflectionLog[0] is string && data.reflectionLog[0].size() <= 500));
+    }
+
+    function isValidChatMessage(data, userId, messageId) {
+      return data.keys().hasAll(['id', 'userId', 'sender', 'text', 'timestamp', 'formattedTime', 'mode'])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'conversationId',
+          'sender',
+          'text',
+          'timestamp',
+          'formattedTime',
+          'mode',
+          'reactions',
+          'brickAwarded'
+        ])
+        && isValidId(data.id)
+        && data.id == messageId
+        && isValidId(data.userId)
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && (!('conversationId' in data) || isValidId(data.conversationId))
+        && data.sender in ['user', 'spashta']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 4000
+        && data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 64
+        && data.formattedTime is string && data.formattedTime.size() >= 1 && data.formattedTime.size() <= 32
+        && data.mode in ['friend', 'soulmate', 'guide', 'tutor']
+        && (!('reactions' in data) || (data.reactions is list && data.reactions.size() <= 10 && (data.reactions.size() == 0 || (data.reactions[0] is string && data.reactions[0].size() <= 16))))
+        && (!('brickAwarded' in data) || (
+          data.brickAwarded is map
+          && data.brickAwarded.keys().hasAll(['reason'])
+          && data.brickAwarded.keys().hasOnly(['reason', 'stageMilestone'])
+          && data.brickAwarded.reason is string && data.brickAwarded.reason.size() <= 400
+          && (!('stageMilestone' in data.brickAwarded) || (data.brickAwarded.stageMilestone is string && data.brickAwarded.stageMilestone.size() <= 120))
+        ));
+    }
+
+    function isValidConversation(data, userId, conversationId) {
+      return data.keys().hasAll(['id', 'userId', 'mode', 'title', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'mode', 'title', 'createdAt', 'updatedAt', 'messageCount'])
+        && isValidId(data.id)
+        && data.id == conversationId
+        && isValidId(data.userId)
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.mode in ['friend', 'soulmate', 'guide', 'tutor']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64
+        && data.updatedAt is string && data.updatedAt.size() >= 1 && data.updatedAt.size() <= 64
+        && (!('messageCount' in data) || (data.messageCount is number && data.messageCount >= 0 && data.messageCount <= 10000));
+    }
+
+    function isValidMoodRecord(data, userId, moodId) {
+      return data.keys().hasAll(['id', 'userId', 'timestamp', 'dateStr', 'mood', 'intensity', 'source', 'tags'])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'timestamp',
+          'dateStr',
+          'mood',
+          'intensity',
+          'note',
+          'source',
+          'confidence',
+          'context',
+          'mode',
+          'tags'
+        ])
+        && isValidId(data.id)
+        && data.id == moodId
+        && isValidId(data.userId)
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 64
+        && data.dateStr is string && data.dateStr.size() >= 8 && data.dateStr.size() <= 16
+        && data.mood in [
+          'joyful',
+          'peaceful',
+          'hopeful',
+          'reflective',
+          'sad',
+          'anxious',
+          'overwhelmed',
+          'frustrated',
+          'tired',
+          'neutral',
+          'clarified'
+        ]
+        && data.intensity is number && data.intensity >= 1 && data.intensity <= 5
+        && (!('note' in data) || (data.note is string && data.note.size() <= 1000))
+        && data.source in ['self_checkin', 'manual', 'ai_inferred', 'chat_reflection']
+        && (!('confidence' in data) || (data.confidence is number && data.confidence >= 0 && data.confidence <= 1))
+        && (!('context' in data) || (data.context is string && data.context.size() <= 500))
+        && (!('mode' in data) || (data.mode in ['friend', 'soulmate', 'guide', 'tutor']))
+        && data.tags is list && data.tags.size() <= 10
+        && (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 64));
+    }
+
+    // User Private Profile (PII isolated to verified owner only)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerifiedOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isVerifiedOwner(userId)
+        && isValidUserProfile(incoming(), userId);
+      allow update: if isValidId(userId)
+        && isVerifiedOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().joinedAt == existing().joinedAt
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'fullName',
+          'age',
+          'isMinor',
+          'guardianEmail',
+          'guardianConsentGiven',
+          'totalBricksEarned',
+          'preferences',
+          'updatedAt'
+        ]);
+      allow delete: if isValidId(userId) && isVerifiedOwner(userId);
+
+      // Houses Subcollection (Master Gate: checks parent user document exists)
+      match /houses/{houseId} {
+        allow get: if isValidId(userId) && isValidId(houseId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(houseId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidHouseProject(incoming(), userId, houseId);
+        allow update: if isValidId(userId) && isValidId(houseId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidHouseProject(incoming(), userId, houseId)
+          && existing().stage != 'completed'
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().startedAt == existing().startedAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'bricksUsed',
+            'stage',
+            'percentage',
+            'completedAt',
+            'reflectionLog'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(houseId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Conversations Subcollection (Mode-specific isolated conversations)
+      match /conversations/{conversationId} {
+        allow get: if isValidId(userId) && isValidId(conversationId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(conversationId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidConversation(incoming(), userId, conversationId);
+        allow update: if isValidId(userId) && isValidId(conversationId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidConversation(incoming(), userId, conversationId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'updatedAt', 'messageCount']);
+        allow delete: if isValidId(userId) && isValidId(conversationId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        // Nested Messages Subcollection inside a Conversation
+        match /messages/{messageId} {
+          allow get: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isVerifiedOwner(userId)
+            && exists(/databases/$(database)/documents/users/$(userId));
+          allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+          allow create: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isVerifiedOwner(userId)
+            && exists(/databases/$(database)/documents/users/$(userId))
+            && isValidChatMessage(incoming(), userId, messageId);
+          allow update: if false;
+          allow delete: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isVerifiedOwner(userId)
+            && exists(/databases/$(database)/documents/users/$(userId));
+        }
+      }
+
+      // Chat Messages Subcollection
+      match /messages/{messageId} {
+        allow get: if isValidId(userId) && isValidId(messageId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(messageId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidChatMessage(incoming(), userId, messageId);
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(messageId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Mood Records Subcollection
+      match /moods/{moodId} {
+        allow get: if isValidId(userId) && isValidId(moodId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(moodId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidMoodRecord(incoming(), userId, moodId);
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(moodId) && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+    }
+  }
+}
