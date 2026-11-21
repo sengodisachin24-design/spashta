@@ -157,6 +157,8 @@ interface DispatchResult {
   success: boolean;
   method: string;
   error?: string;
+  devCode?: string;
+  devNote?: string;
 }
 
 async function dispatchEmailToUser(
@@ -173,7 +175,13 @@ async function dispatchEmailToUser(
   // 1. Try Resend API if configured
   const resendKey = cleanEnvSecret(process.env.RESEND_API_KEY);
   const isResendPlaceholder =
-    !resendKey || resendKey === 're_123456789' || resendKey.includes('MY_') || !resendKey.startsWith('re_');
+    !resendKey ||
+    resendKey === 're_123456789' ||
+    resendKey === 're_your_resend_api_key' ||
+    resendKey.includes('your_resend') ||
+    resendKey.includes('MY_') ||
+    resendKey.length < 24 ||
+    !resendKey.startsWith('re_');
 
   if (!isResendPlaceholder) {
     try {
@@ -219,10 +227,19 @@ async function dispatchEmailToUser(
 
       const errData = (await res.json().catch(() => ({}))) as { message?: string };
       console.warn(`[EMAIL DISPATCH] Resend API error (${res.status}): ${errData.message || 'Unknown error'}`);
+      const rawMsg = errData.message || '';
+      let errorDescription = `Resend email service rejected the request (${res.status}).`;
+      if (res.status === 401 || rawMsg.toLowerCase().includes('api key')) {
+        errorDescription =
+          'The provided RESEND_API_KEY is invalid or unactivated. Please check your key at https://resend.com (or configure SMTP).';
+      } else if (rawMsg) {
+        errorDescription = `Resend error: ${rawMsg}`;
+      }
+
       return {
         success: false,
         method: 'resend_error',
-        error: errData.message || `Resend email service rejected the request (${res.status}).`,
+        error: errorDescription,
       };
     } catch {
       return {
@@ -298,12 +315,28 @@ async function dispatchEmailToUser(
     }
   }
 
-  // If neither is configured, refuse to fake delivery
+  // 3. Development / Sandbox fallback (allows instant testing without third-party email setup)
+  const isDev = process.env.NODE_ENV !== 'production';
+  if (isDev) {
+    console.log(`\n======================================================`);
+    console.log(`[SPASHTA DEV OTP] Verification Code for ${toEmail}: ${code}`);
+    console.log(`[SPASHTA DEV OTP] Set a valid RESEND_API_KEY in .env for real inbox delivery.`);
+    console.log(`======================================================\n`);
+
+    return {
+      success: true,
+      method: 'dev_console',
+      devCode: code,
+      devNote: `[Dev Mode] Verification code: ${code} (Printed in console; set RESEND_API_KEY for real inbox delivery).`,
+    };
+  }
+
+  // If in production and neither is configured, refuse to fake delivery
   return {
     success: false,
     method: 'not_configured',
     error:
-      'Real email delivery is not configured on the server. Please set RESEND_API_KEY (from https://resend.com) or SMTP_USER & SMTP_PASS in your environment secrets to deliver verification codes.',
+      'Real email delivery is not configured on the production server. Please set RESEND_API_KEY (from https://resend.com) or SMTP_USER & SMTP_PASS in your environment secrets to deliver verification codes.',
   };
 }
 
@@ -405,9 +438,10 @@ apiRouter.post('/otp/send', async (req: Request, res: Response) => {
       success: true,
       emailDelivered: true,
       deliveryMethod: dispatchResult.method,
-      message: `A 6-digit verification code has been delivered to ${normalizedEmail}.`,
+      message: dispatchResult.devNote || `A 6-digit verification code has been delivered to ${normalizedEmail}.`,
       expiresInSeconds: 300,
       cooldownSeconds: 60,
+      ...(dispatchResult.devCode ? { devCode: dispatchResult.devCode } : {}),
     });
   } catch (err) {
     console.error('[SPASHTA AUTH] Error in /otp/send:', err);
