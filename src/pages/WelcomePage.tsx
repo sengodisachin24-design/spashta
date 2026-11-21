@@ -92,7 +92,12 @@ export const WelcomePage: React.FC = () => {
         return false;
       }
 
-      setSuccessMessage(`A 6-digit verification code has been dispatched to ${targetEmail}. Please check your inbox.`);
+      if (data.devCode) {
+        setSuccessMessage(`Verification code: ${data.devCode} (Development auto-fill).`);
+        setOtpCode(data.devCode);
+      } else {
+        setSuccessMessage(data.message || `A 6-digit verification code has been dispatched to ${targetEmail}. Please check your inbox.`);
+      }
       setCooldown(data.cooldownSeconds || 60);
       return true;
     } catch {
@@ -141,7 +146,6 @@ export const WelcomePage: React.FC = () => {
 
     const sent = await handleSendOtp(cleanEmail);
     if (sent) {
-      setOtpCode('');
       setStep('otp');
     }
   };
