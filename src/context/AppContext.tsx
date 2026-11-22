@@ -845,7 +845,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     firestoreUserReadyRef.current = null;
     setUser(null);
+    setFirebaseUser(null);
+    setMessages([createWelcomeMessage('friend')]);
+    setConversations({ friend: [], soulmate: [], tutor: [], guide: [] });
+    setActiveConversationId({ friend: null, soulmate: null, tutor: null, guide: null });
+    setTotalBricksEarned(0);
+    setCurrentHouse(null);
+    setCompletedHouses([]);
+    setMoodRecords([]);
+    setActiveBrickCelebration(null);
+    setWellbeingPrompt(null);
+    setChatError(null);
+    setLastFailedMessage(null);
+
+    // Completely clear all user-specific storage keys
     localStorage.removeItem(STORAGE_KEY + '_user');
+    localStorage.removeItem(STORAGE_KEY + '_chat');
+    localStorage.removeItem(STORAGE_KEY + '_convs');
+    localStorage.removeItem(STORAGE_KEY + '_bricks');
+    localStorage.removeItem(STORAGE_KEY + '_house');
+    localStorage.removeItem(STORAGE_KEY + '_city');
+    localStorage.removeItem(STORAGE_KEY + '_moods');
+
     navigateTo('welcome');
   };
 

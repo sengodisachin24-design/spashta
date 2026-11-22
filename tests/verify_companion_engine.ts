@@ -1,3 +1,5 @@
+process.env.TEST_MOCK_DISPATCH = 'true';
+
 import express from 'express';
 import { apiRouter, getSystemInstructionForMode, ANTI_REPETITION_DIRECTIVE } from '../server/api.js';
 
@@ -163,6 +165,27 @@ async function runTests() {
     passed++;
   } else {
     console.error('❌ FAIL: Expected 400 for invalid email, got:', resOtpInvalid);
+    failed++;
+  }
+
+  // TEST 8: Zero OTP Exposure in API Responses
+  console.log('\n[TEST 8] Testing Zero OTP Exposure in API Responses...');
+  const resSendOtp = await makeRequest('/api/otp/send', 'POST', {
+    email: 'privacy.test@example.com',
+    mode: 'register',
+  });
+  const hasExposedCode =
+    'devCode' in (resSendOtp.body || {}) ||
+    'devNote' in (resSendOtp.body || {}) ||
+    'code' in (resSendOtp.body || {}) ||
+    'otp' in (resSendOtp.body || {}) ||
+    JSON.stringify(resSendOtp.body || {}).includes('Verification code:');
+
+  if (resSendOtp.status === 200 && !hasExposedCode) {
+    console.log('✅ PASS: API response strictly protects OTP secret and never exposes codes to browser.');
+    passed++;
+  } else {
+    console.error('❌ FAIL: OTP secret leaked in API response:', resSendOtp.body);
     failed++;
   }
 

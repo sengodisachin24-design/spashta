@@ -151,14 +151,63 @@ if (cleanupTimer && typeof cleanupTimer.unref === 'function') {
 }
 
 // ---------------------------------------------------------------------------
-// Email Dispatching (Resend API preferred, SMTP fallback)
+// Email Dispatching (Gmail SMTP Primary, Resend API Alternative)
 // ---------------------------------------------------------------------------
 interface DispatchResult {
   success: boolean;
   method: string;
   error?: string;
-  devCode?: string;
-  devNote?: string;
+}
+
+function buildSpashtaOtpEmail(code: string, mode: 'register' | 'login') {
+  const isRegister = mode === 'register';
+  const actionTitle = isRegister ? 'Complete your SPASHTA Registration' : 'Sign in to your SPASHTA Sanctuary';
+  const actionSummary = isRegister
+    ? 'Welcome! Enter this confidential 6-digit code to complete your registration and begin building your fairytale kingdom.'
+    : 'Welcome back! Enter this confidential 6-digit code to sign in to your personal SPASHTA sanctuary.';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body style="margin: 0; padding: 20px; background-color: #FAF6EE; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <div style="background-color: #FFFDF9; padding: 36px 24px; border-radius: 24px; border: 2px solid #FFE39A; max-width: 500px; margin: 0 auto; box-shadow: 0 8px 30px rgba(122, 91, 11, 0.08);">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="display: inline-block; background-color: #FFF0D9; border: 2px solid #FFE39A; border-radius: 20px; padding: 10px 16px; margin-bottom: 8px;">
+              <span style="font-size: 26px;">✨</span>
+            </div>
+            <h1 style="color: #292B42; margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px;">SPASHTA</h1>
+            <p style="color: #7A5B0B; font-size: 12px; margin: 4px 0 0 0; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">A Little Clarity. A World of Possibilities.</p>
+          </div>
+          
+          <div style="background-color: #FFFFFF; border: 1.5px solid #FFE39A; border-radius: 18px; padding: 22px; margin-bottom: 20px;">
+            <h2 style="color: #292B42; font-size: 18px; font-weight: 800; margin: 0 0 10px 0;">${actionTitle}</h2>
+            <p style="color: #525672; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">${actionSummary}</p>
+            
+            <div style="background: linear-gradient(135deg, #FFF0D9, #FFE39A); color: #292B42; font-size: 38px; font-weight: 900; letter-spacing: 10px; padding: 18px 10px; border-radius: 16px; text-align: center; margin: 18px 0; border: 2px solid #F5C754; font-family: monospace;">
+              ${code}
+            </div>
+            
+            <div style="color: #7A5B0B; font-size: 13px; font-weight: 700; text-align: center;">
+              ⏱️ Single-use code expires in <strong>5 minutes</strong>.
+            </div>
+          </div>
+          
+          <p style="color: #8C8FA7; font-size: 12px; line-height: 1.5; text-align: center; margin: 0; padding-top: 10px;">
+            If you did not request this verification code, no action is required. Your account remains secure.<br>
+            <strong>SPASHTA will never ask you to disclose this code.</strong>
+          </p>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `SPASHTA — ${actionTitle}\n\n${actionSummary}\n\nYour 6-digit verification code: ${code}\n\nThis code expires in 5 minutes. Never share this code with anyone.`;
+
+  return { html, text, actionTitle };
 }
 
 async function dispatchEmailToUser(
@@ -166,15 +215,67 @@ async function dispatchEmailToUser(
   code: string,
   mode: 'register' | 'login'
 ): Promise<DispatchResult> {
-  const isRegister = mode === 'register';
-  const actionTitle = isRegister ? 'Complete your SPASHTA Registration' : 'Sign in to your SPASHTA Sanctuary';
-  const actionSummary = isRegister
-    ? 'Welcome! Enter this confidential 6-digit code to complete your registration and begin building your fairytale kingdom.'
-    : 'Welcome back! Enter this confidential 6-digit code to sign in to your personal SPASHTA sanctuary.';
+  // Test mock mode for automated headless test runners
+  if (process.env.TEST_MOCK_DISPATCH === 'true') {
+    return { success: true, method: 'test_mock' };
+  }
 
-  let resendError: { method: string; error: string } | null = null;
+  const { html, text } = buildSpashtaOtpEmail(code, mode);
 
-  // 1. Try Resend API if configured
+  // 1. PRIMARY: Gmail SMTP (or configured custom SMTP)
+  // Sends real OTP emails to ANY recipient email address (Gmail, Outlook, Yahoo, etc.)
+  const smtpUser = cleanEnvSecret(process.env.SMTP_USER);
+  const smtpPass = cleanEnvSecret(process.env.SMTP_PASS).replace(/\s+/g, '');
+  const isSmtpPlaceholder =
+    !smtpUser ||
+    !smtpPass ||
+    smtpUser === 'my_email@gmail.com' ||
+    smtpUser === 'your-email@gmail.com' ||
+    smtpUser === 'your-gmail-address@gmail.com' ||
+    smtpPass === 'xxxx_xxxx_xxxx_xxxx' ||
+    smtpPass === '16-character-app-password' ||
+    smtpPass === 'your-google-app-password' ||
+    /^x+(_x+)*$/i.test(smtpPass) ||
+    smtpUser.includes('MY_') ||
+    smtpPass.includes('MY_');
+
+  if (!isSmtpPlaceholder) {
+    try {
+      const customHost = cleanEnvSecret(process.env.SMTP_HOST) || 'smtp.gmail.com';
+      const customPort = Number(process.env.SMTP_PORT || 465);
+
+      const transporter = nodemailer.createTransport({
+        host: customHost,
+        port: customPort,
+        secure: customPort === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+        connectionTimeout: 15000,
+      });
+
+      const senderFrom = cleanEnvSecret(process.env.EMAIL_FROM) || `"SPASHTA Sanctuary" <${smtpUser}>`;
+
+      await transporter.sendMail({
+        from: senderFrom,
+        to: toEmail, // Sends directly to the exact email address the user entered
+        subject: `${code} is your SPASHTA verification code`,
+        text,
+        html,
+      });
+
+      console.log(`[EMAIL DISPATCH] Delivered verification email to ${toEmail} via SMTP (${customHost})`);
+      return { success: true, method: 'smtp' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[EMAIL DISPATCH] SMTP dispatch failed to ${toEmail}:`, msg);
+      return {
+        success: false,
+        method: 'smtp_failed',
+        error: `Gmail SMTP delivery failed (${msg}). Please verify your SMTP_USER and 16-character Google App Password in .env.`,
+      };
+    }
+  }
+
+  // 2. ALTERNATIVE: Resend API (For production deployment with a verified custom domain)
   const resendKey = cleanEnvSecret(process.env.RESEND_API_KEY);
   const isResendPlaceholder =
     !resendKey ||
@@ -202,23 +303,7 @@ async function dispatchEmailToUser(
           from: fromEmail,
           to: [toEmail],
           subject: `${code} is your SPASHTA verification code`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #FFFDF9; padding: 32px; border-radius: 20px; border: 2px solid #FFE39A; max-width: 500px; margin: auto;">
-              <div style="text-align: center; margin-bottom: 20px;">
-                <h1 style="color: #292B42; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -0.5px;">SPASHTA</h1>
-                <p style="color: #7A5B0B; font-size: 13px; margin-top: 4px; font-weight: 600;">A little clarity. A world of possibilities.</p>
-              </div>
-              <h2 style="color: #292B42; font-size: 18px; font-weight: 700; margin-top: 0;">${actionTitle}</h2>
-              <p style="color: #525672; font-size: 14px; line-height: 1.5;">${actionSummary}</p>
-              <div style="background: linear-gradient(135deg, #FFF0D9, #FFE39A); color: #292B42; font-size: 36px; font-weight: 900; letter-spacing: 8px; padding: 18px; border-radius: 14px; text-align: center; margin: 24px 0; border: 2px solid #F5C754;">
-                ${code}
-              </div>
-              <p style="color: #7A5B0B; font-size: 12px; margin-bottom: 4px;">⏱️ This single-use code expires in <strong>5 minutes</strong>.</p>
-              <p style="color: #8C8FA7; font-size: 11px; margin-top: 24px; border-top: 1px solid #FFE39A; padding-top: 16px;">
-                If you did not request this code, no action is needed. You can safely ignore this email.
-              </p>
-            </div>
-          `,
+          html,
         }),
       });
 
@@ -228,122 +313,40 @@ async function dispatchEmailToUser(
       }
 
       const errData = (await res.json().catch(() => ({}))) as { message?: string };
+      console.warn(`[EMAIL DISPATCH] Resend API error (${res.status}): ${errData.message || 'Unknown error'}`);
       const rawMsg = errData.message || '';
-      console.warn(`[EMAIL DISPATCH] Resend API error (${res.status}): ${rawMsg || 'Unknown error'}`);
       let errorDescription = `Resend email service rejected the request (${res.status}).`;
+
       if (res.status === 401 || rawMsg.toLowerCase().includes('api key')) {
         errorDescription =
-          'The provided RESEND_API_KEY is invalid or unactivated. Please check your key at https://resend.com (or configure SMTP), or use "Continue with Google".';
+          'The provided RESEND_API_KEY is invalid. Please check your key at https://resend.com (or configure Gmail SMTP).';
+      } else if (res.status === 403 && rawMsg.toLowerCase().includes('only send testing emails')) {
+        errorDescription =
+          `Resend free tier only sends to your registered Resend account email. To send real OTPs to ANY email address (Gmail, Outlook, Yahoo, etc.), please configure Gmail SMTP (SMTP_USER and SMTP_PASS) in your .env file.`;
       } else if (rawMsg) {
         errorDescription = `Resend error: ${rawMsg}`;
       }
-      resendError = {
+
+      return {
+        success: false,
         method: 'resend_error',
         error: errorDescription,
       };
     } catch {
-      resendError = {
-        method: 'resend_network_error',
-        error: 'Could not connect to the Resend email service. Please try again shortly or use "Continue with Google".',
-      };
-    }
-  }
-
-  // 2. Try SMTP (e.g. Gmail) if configured
-  const smtpUser = cleanEnvSecret(process.env.SMTP_USER);
-  const smtpPass = cleanEnvSecret(process.env.SMTP_PASS).replace(/\s+/g, '');
-  const isSmtpPlaceholder =
-    !smtpUser ||
-    !smtpPass ||
-    smtpUser === 'my_email@gmail.com' ||
-    smtpPass === 'xxxx_xxxx_xxxx_xxxx' ||
-    /^x+(_x+)*$/i.test(smtpPass) ||
-    smtpUser.includes('MY_') ||
-    smtpPass.includes('MY_');
-
-  if (!isSmtpPlaceholder) {
-    try {
-      const customHost = cleanEnvSecret(process.env.SMTP_HOST);
-      const customPort = Number(process.env.SMTP_PORT || 465);
-
-      const transporter = nodemailer.createTransport(
-        customHost
-          ? {
-              host: customHost,
-              port: customPort,
-              secure: customPort === 465,
-              auth: { user: smtpUser, pass: smtpPass },
-              connectionTimeout: 10000,
-            }
-          : {
-              host: 'smtp.gmail.com',
-              port: 465,
-              secure: true,
-              auth: { user: smtpUser, pass: smtpPass },
-              connectionTimeout: 10000,
-            }
-      );
-
-      await transporter.sendMail({
-        from: cleanEnvSecret(process.env.EMAIL_FROM) || `"SPASHTA" <${smtpUser}>`,
-        to: toEmail,
-        subject: `${code} is your SPASHTA verification code`,
-        text: `Your SPASHTA verification code is: ${code}. It expires in 5 minutes. Never share this code with anyone.`,
-        html: `
-          <div style="font-family: sans-serif; background-color: #FFFDF9; padding: 30px; border-radius: 16px; border: 2px solid #FFE39A; max-width: 500px; margin: auto;">
-            <h2 style="color: #292B42; margin-bottom: 8px;">Welcome to SPASHTA</h2>
-            <p style="color: #525672; font-size: 14px;">A little clarity. A world of possibilities.</p>
-            <p style="color: #292B42; font-size: 15px; margin-top: 20px;">Your confidential 6-digit verification code is:</p>
-            <div style="background-color: #FFE39A; color: #292B42; font-size: 32px; font-weight: 800; letter-spacing: 6px; padding: 16px; border-radius: 12px; text-align: center; margin: 16px 0;">
-              ${code}
-            </div>
-            <p style="color: #7A5B0B; font-size: 12px;">This code expires in 5 minutes. Never share this code with anyone.</p>
-          </div>
-        `,
-      });
-
-      console.log(`[EMAIL DISPATCH] Delivered verification email to ${toEmail} via SMTP`);
-      return { success: true, method: 'smtp' };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        method: 'smtp_failed',
-        error: `SMTP email dispatch failed: ${msg}. Check SMTP_USER and SMTP_PASS.`,
+        method: 'resend_network_error',
+        error: 'Could not connect to the Resend email service. Please check your connection or use Gmail SMTP.',
       };
     }
   }
 
-  if (resendError) {
-    return {
-      success: false,
-      method: resendError.method,
-      error: resendError.error,
-    };
-  }
-
-  // 3. Development / Sandbox fallback (allows instant testing without third-party email setup)
-  const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev) {
-    console.log(`\n======================================================`);
-    console.log(`[SPASHTA DEV OTP] Verification Code for ${toEmail}: ${code}`);
-    console.log(`[SPASHTA DEV OTP] Set a valid RESEND_API_KEY in .env for real inbox delivery.`);
-    console.log(`======================================================\n`);
-
-    return {
-      success: true,
-      method: 'dev_console',
-      devCode: code,
-      devNote: `[Dev Mode] Verification code: ${code} (Printed in console; set RESEND_API_KEY for real inbox delivery).`,
-    };
-  }
-
-  // If in production and neither is configured, refuse to fake delivery
+  // 3. Neither is configured — do not fake delivery!
   return {
     success: false,
     method: 'not_configured',
     error:
-      'Real email delivery is not configured on the production server. Please set RESEND_API_KEY (from https://resend.com) or SMTP_USER & SMTP_PASS in Settings > Secrets, or use "Continue with Google".',
+      'Unable to send verification email. Please configure SMTP_USER and SMTP_PASS (Gmail App Password) in your .env file to deliver verification codes.',
   };
 }
 
@@ -445,10 +448,9 @@ apiRouter.post('/otp/send', async (req: Request, res: Response) => {
       success: true,
       emailDelivered: true,
       deliveryMethod: dispatchResult.method,
-      message: dispatchResult.devNote || `A 6-digit verification code has been delivered to ${normalizedEmail}.`,
+      message: 'Verification code sent to your email.',
       expiresInSeconds: 300,
       cooldownSeconds: 60,
-      ...(dispatchResult.devCode ? { devCode: dispatchResult.devCode } : {}),
     });
   } catch (err) {
     console.error('[SPASHTA AUTH] Error in /otp/send:', err);

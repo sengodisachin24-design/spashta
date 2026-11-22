@@ -86,15 +86,14 @@ export const WelcomePage: React.FC = () => {
 
       if (!res.ok || !data.emailDelivered) {
         setErrorMessage(
-          data.error || 'Could not send verification email. Please check your email delivery configuration.'
+          data.error || 'Unable to send verification email. Please try again later.'
         );
         if (data.waitSeconds) setCooldown(data.waitSeconds);
         return false;
       }
 
-      setSuccessMessage(
-        data.message || `A 6-digit verification code has been dispatched to ${targetEmail}. Please check your inbox.`
-      );
+      setSuccessMessage('Verification code sent to your email.');
+      setOtpCode('');
       setCooldown(data.cooldownSeconds || 60);
       return true;
     } catch {
