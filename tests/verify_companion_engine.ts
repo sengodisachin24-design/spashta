@@ -1,3 +1,5 @@
+process.env.TEST_MOCK_DISPATCH = 'true';
+
 import express from 'express';
 import { apiRouter, getSystemInstructionForMode, ANTI_REPETITION_DIRECTIVE } from '../server/api.js';
 
