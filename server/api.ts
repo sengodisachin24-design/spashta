@@ -449,6 +449,76 @@ apiRouter.post('/otp/send', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/otp/reset (Invalidates old code, clears cooldown, and dispatches a fresh OTP)
+apiRouter.post('/otp/reset', async (req: Request, res: Response) => {
+  try {
+    const { email, mode = 'register' } = req.body;
+
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const oldRecord = otpStore.get(normalizedEmail);
+
+    // Atomically invalidate old code and reset cooldown
+    otpStore.delete(normalizedEmail);
+
+    // Generate fresh cryptographically secure 6-digit OTP
+    const code = crypto.randomInt(100000, 1000000).toString();
+    const now = Date.now();
+    const expiresAt = now + 5 * 60 * 1000; // 5 minutes
+    const resendAvailableAt = now + 60 * 1000; // 60 seconds cooldown
+
+    console.log(`[SPASHTA AUTH] Resetting and re-issuing OTP for ${normalizedEmail}`);
+
+    const dispatchResult = await dispatchEmailToUser(
+      normalizedEmail,
+      code,
+      mode === 'login' ? 'login' : 'register'
+    );
+
+    if (!dispatchResult.success) {
+      return res.status(422).json({
+        success: false,
+        emailDelivered: false,
+        deliveryMethod: dispatchResult.method,
+        error: dispatchResult.error || 'Failed to dispatch verification email.',
+      });
+    }
+
+    // Store new active OTP with attempts reset to 0
+    otpStore.set(normalizedEmail, {
+      codeHash: hashOtpCode(normalizedEmail, code),
+      email: normalizedEmail,
+      expiresAt,
+      resendAvailableAt,
+      attempts: 0,
+      mode: mode === 'login' ? 'login' : 'register',
+      fullName: oldRecord?.fullName,
+      age: oldRecord?.age,
+      isMinor: oldRecord?.isMinor,
+      guardianEmail: oldRecord?.guardianEmail,
+      guardianConsentGiven: oldRecord?.guardianConsentGiven,
+    });
+
+    return res.json({
+      success: true,
+      emailDelivered: true,
+      deliveryMethod: dispatchResult.method,
+      message:
+        dispatchResult.devNote ||
+        `Your verification session has been reset. A brand new 6-digit code has been delivered to ${normalizedEmail}.`,
+      expiresInSeconds: 300,
+      cooldownSeconds: 60,
+      ...(dispatchResult.devCode ? { devCode: dispatchResult.devCode } : {}),
+    });
+  } catch (err) {
+    console.error('[SPASHTA AUTH] Error in /otp/reset:', err);
+    return res.status(500).json({ error: 'Failed to reset verification code.' });
+  }
+});
+
 // POST /api/otp/verify
 apiRouter.post('/otp/verify', async (req: Request, res: Response) => {
   try {

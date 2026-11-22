@@ -166,6 +166,20 @@ async function runTests() {
     failed++;
   }
 
+  // TEST 8: OTP Reset Endpoint
+  console.log('\n[TEST 8] Testing Email OTP Reset Endpoint...');
+  const resOtpReset = await makeRequest('/api/otp/reset', 'POST', {
+    email: 'traveler.reset.test@example.com',
+    mode: 'register',
+  });
+  if (resOtpReset.status === 200 && resOtpReset.body.success === true) {
+    console.log('✅ PASS: OTP Reset cleanly issues fresh code and clears cooldown.');
+    passed++;
+  } else {
+    console.error('❌ FAIL: Expected 200 for OTP reset, got:', resOtpReset);
+    failed++;
+  }
+
   console.log(`\n========================================`);
   console.log(`TEST SUMMARY: ${passed} Passed, ${failed} Failed`);
   console.log(`========================================`);

@@ -12,6 +12,7 @@ import {
   Info,
   LogIn,
   UserPlus,
+  RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SpashtaMascot } from '../components/mascot/SpashtaMascot';
@@ -104,6 +105,49 @@ export const WelcomePage: React.FC = () => {
       setIsLoading(false);
       setErrorMessage('Could not reach the verification server. Please refresh and try again.');
       return false;
+    }
+  };
+
+  const handleResetOtp = async () => {
+    const cleanEmail = (step === 'guardian_otp' ? guardianEmail : email).trim().toLowerCase();
+    if (!cleanEmail) return;
+
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/otp/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          mode: authTab === 'login' ? 'login' : 'register',
+        }),
+      });
+
+      const data = await safeParseResponse(res);
+      setIsLoading(false);
+      setDeliveryMethod(data.deliveryMethod || null);
+
+      if (!res.ok) {
+        setErrorMessage(data.error || 'Failed to reset verification code. Please try again.');
+        return;
+      }
+
+      if (data.devCode) {
+        setSuccessMessage(`OTP reset successful! New code: ${data.devCode}`);
+        setOtpCode(data.devCode);
+      } else {
+        setSuccessMessage(
+          data.message || `Your OTP has been reset. A brand new code was dispatched to ${cleanEmail}.`
+        );
+        setOtpCode('');
+      }
+      setCooldown(data.cooldownSeconds || 60);
+    } catch {
+      setIsLoading(false);
+      setErrorMessage('Could not reach the verification server to reset code. Please try again.');
     }
   };
 
@@ -697,11 +741,22 @@ export const WelcomePage: React.FC = () => {
 
                 <button
                   type="button"
+                  disabled={isLoading}
+                  onClick={handleResetOtp}
+                  className="hover:text-[#292B42] text-amber-800 underline cursor-pointer font-black flex items-center gap-1"
+                  title="Clears cooldown and invalidates old code to send a fresh one"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset OTP</span>
+                </button>
+
+                <button
+                  type="button"
                   disabled={cooldown > 0 || isLoading}
                   onClick={() => handleSendOtp(email)}
                   className="hover:text-[#7A5B0B] disabled:opacity-40 cursor-pointer font-black text-[#292B42]"
                 >
-                  {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend Code'}
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
                 </button>
               </div>
             </form>
