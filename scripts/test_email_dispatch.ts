@@ -32,6 +32,10 @@ async function main() {
         connectionTimeout: 15000,
       });
 
+      console.log(`[SMTP] Verifying connection to ${customHost}:${customPort}...`);
+      await transporter.verify();
+      console.log(`✅ [SMTP] TLS authentication & connectivity verified successfully!`);
+
       const info = await transporter.sendMail({
         from: process.env.EMAIL_FROM || `"SPASHTA Sanctuary" <${smtpUser}>`,
         to: targetEmail,

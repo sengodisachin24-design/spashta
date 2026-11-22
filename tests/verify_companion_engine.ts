@@ -85,8 +85,8 @@ async function runTests() {
     mode: 'friend',
     isMinor: true,
   });
-  // Since GEMINI_API_KEY may not be set in test environment, it should either return 503 (geminiUnconfigured) or 200 (if key present), NOT 403!
-  if (resMinorFriend.status === 200 || resMinorFriend.status === 503) {
+  // Since GEMINI_API_KEY may not be set or network offline in test runner, it should either return 503/502 (Gemini unconfigured/network unreachable) or 200, NOT 403!
+  if (resMinorFriend.status === 200 || resMinorFriend.status === 503 || resMinorFriend.status === 502) {
     console.log(`✅ PASS: Minor can access Friend Mode (Status: ${resMinorFriend.status}).`);
     passed++;
   } else {
@@ -101,7 +101,7 @@ async function runTests() {
     mode: 'guide',
     isMinor: true,
   });
-  if (resMinorGuide.status === 200 || resMinorGuide.status === 503) {
+  if (resMinorGuide.status === 200 || resMinorGuide.status === 503 || resMinorGuide.status === 502) {
     console.log(`✅ PASS: Minor can access Guide Mode (Status: ${resMinorGuide.status}).`);
     passed++;
   } else {
