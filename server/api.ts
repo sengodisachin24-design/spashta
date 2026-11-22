@@ -232,6 +232,8 @@ async function dispatchEmailToUser(
       if (res.status === 401 || rawMsg.toLowerCase().includes('api key')) {
         errorDescription =
           'The provided RESEND_API_KEY is invalid or unactivated. Please check your key at https://resend.com (or configure SMTP).';
+      } else if (res.status === 403 && rawMsg.toLowerCase().includes('only send testing emails')) {
+        errorDescription = `Resend Free Tier: ${rawMsg} (Please use your Resend account email on the signup screen).`;
       } else if (rawMsg) {
         errorDescription = `Resend error: ${rawMsg}`;
       }
