@@ -193,6 +193,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Companion Mode (Default: friend)
   const [companionMode, setCompanionModeState] = useState<CompanionMode>('friend');
+  const companionModeRef = useRef<CompanionMode>(companionMode);
+  companionModeRef.current = companionMode;
 
   // Conversations state grouped by mode
   const [conversations, setConversations] = useState<Record<CompanionMode, ConversationMeta[]>>(() => {
@@ -420,7 +422,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveConversationId(newActive);
 
       // Load active conversation messages for companionMode
-      const activeId = newActive[companionMode];
+      const activeMode = companionModeRef.current;
+      const activeId = newActive[activeMode];
       if (activeId) {
         await loadConversationMessages(uid, activeId);
       } else {
@@ -431,7 +434,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const loadedMsgs: ChatMessage[] = [];
         msgsSnap.forEach((d) => {
           const m = d.data() as ChatMessage;
-          if (m.mode === companionMode || (!m.mode && companionMode === 'friend')) {
+          if (m.mode === activeMode || (!m.mode && activeMode === 'friend')) {
             loadedMsgs.push(m);
           }
         });
@@ -439,7 +442,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (loadedMsgs.length > 0) {
           setMessages(loadedMsgs);
         } else {
-          setMessages([createWelcomeMessage(companionMode, loadedProfile.fullName)]);
+          setMessages([createWelcomeMessage(activeMode, loadedProfile.fullName)]);
         }
       }
     } catch {
@@ -514,7 +517,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsAuthReady(true);
     });
     return () => unsubscribe();
-  }, [companionMode]);
+  }, []);
 
   // LocalStorage mirrors
   useEffect(() => {
@@ -869,7 +872,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setCompanionMode = async (mode: CompanionMode) => {
     // Minor Safety: Soulmate Mode forbidden under 18
     if (user?.isMinor && mode === 'soulmate') {
-      alert('Soulmate Mode is strictly reserved for users 18+. As a minor, your safety comes first.');
+      setChatError('Soulmate Mode is strictly reserved for users 18+. As a minor, your safety comes first.');
       return;
     }
 

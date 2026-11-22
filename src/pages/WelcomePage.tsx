@@ -12,7 +12,6 @@ import {
   Info,
   LogIn,
   UserPlus,
-  RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SpashtaMascot } from '../components/mascot/SpashtaMascot';
@@ -93,61 +92,15 @@ export const WelcomePage: React.FC = () => {
         return false;
       }
 
-      if (data.devCode) {
-        setSuccessMessage(`Verification code: ${data.devCode} (Development auto-fill).`);
-        setOtpCode(data.devCode);
-      } else {
-        setSuccessMessage(data.message || `A 6-digit verification code has been dispatched to ${targetEmail}. Please check your inbox.`);
-      }
+      setSuccessMessage(
+        data.message || `A 6-digit verification code has been dispatched to ${targetEmail}. Please check your inbox.`
+      );
       setCooldown(data.cooldownSeconds || 60);
       return true;
     } catch {
       setIsLoading(false);
       setErrorMessage('Could not reach the verification server. Please refresh and try again.');
       return false;
-    }
-  };
-
-  const handleResetOtp = async () => {
-    const cleanEmail = (step === 'guardian_otp' ? guardianEmail : email).trim().toLowerCase();
-    if (!cleanEmail) return;
-
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsLoading(true);
-
-    try {
-      const res = await fetch('/api/otp/reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          mode: authTab === 'login' ? 'login' : 'register',
-        }),
-      });
-
-      const data = await safeParseResponse(res);
-      setIsLoading(false);
-      setDeliveryMethod(data.deliveryMethod || null);
-
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Failed to reset verification code. Please try again.');
-        return;
-      }
-
-      if (data.devCode) {
-        setSuccessMessage(`OTP reset successful! New code: ${data.devCode}`);
-        setOtpCode(data.devCode);
-      } else {
-        setSuccessMessage(
-          data.message || `Your OTP has been reset. A brand new code was dispatched to ${cleanEmail}.`
-        );
-        setOtpCode('');
-      }
-      setCooldown(data.cooldownSeconds || 60);
-    } catch {
-      setIsLoading(false);
-      setErrorMessage('Could not reach the verification server to reset code. Please try again.');
     }
   };
 
@@ -190,6 +143,7 @@ export const WelcomePage: React.FC = () => {
 
     const sent = await handleSendOtp(cleanEmail);
     if (sent) {
+      setOtpCode('');
       setStep('otp');
     }
   };
@@ -428,10 +382,10 @@ export const WelcomePage: React.FC = () => {
               <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
               <span className="font-semibold leading-relaxed">{errorMessage}</span>
             </div>
-            {deliveryMethod === 'not_configured' && (
+            {(deliveryMethod === 'not_configured' || deliveryMethod === 'resend_error' || deliveryMethod === 'smtp_failed') && (
               <div className="ml-7 p-3 rounded-xl bg-white/90 border border-rose-200 text-[11px] text-[#525672] space-y-1">
-                <div className="font-bold text-[#292B42]">Setting up real email delivery:</div>
-                <p>Add <code className="bg-[#FFF0D9] px-1 rounded">RESEND_API_KEY</code> from <strong>resend.com</strong> (or Gmail <code className="bg-[#FFF0D9] px-1 rounded">SMTP_USER</code> &amp; App Password <code className="bg-[#FFF0D9] px-1 rounded">SMTP_PASS</code>) to your environment variables.</p>
+                <div className="font-bold text-[#292B42]">Email OTP delivery requires valid credentials:</div>
+                <p>Set a valid <code className="bg-[#FFF0D9] px-1 rounded">RESEND_API_KEY</code> from <strong>resend.com</strong> (or Gmail <code className="bg-[#FFF0D9] px-1 rounded">SMTP_USER</code> &amp; App Password <code className="bg-[#FFF0D9] px-1 rounded">SMTP_PASS</code>) in <strong>Settings &gt; Secrets</strong> — or click <strong>Continue with Google</strong> above.</p>
               </div>
             )}
           </div>
@@ -741,22 +695,11 @@ export const WelcomePage: React.FC = () => {
 
                 <button
                   type="button"
-                  disabled={isLoading}
-                  onClick={handleResetOtp}
-                  className="hover:text-[#292B42] text-amber-800 underline cursor-pointer font-black flex items-center gap-1"
-                  title="Clears cooldown and invalidates old code to send a fresh one"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset OTP</span>
-                </button>
-
-                <button
-                  type="button"
                   disabled={cooldown > 0 || isLoading}
                   onClick={() => handleSendOtp(email)}
                   className="hover:text-[#7A5B0B] disabled:opacity-40 cursor-pointer font-black text-[#292B42]"
                 >
-                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+                  {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend Code'}
                 </button>
               </div>
             </form>

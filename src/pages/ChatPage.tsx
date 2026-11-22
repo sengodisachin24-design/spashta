@@ -382,13 +382,7 @@ export const ChatPage: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
-                if (isMinor) {
-                  alert('Soulmate Mode is strictly reserved for adults 18+. As a minor, your safety comes first.');
-                  return;
-                }
-                setCompanionMode('soulmate');
-              }}
+              onClick={() => setCompanionMode('soulmate')}
               disabled={isMinor}
               className={`px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 ${
                 activeModeKey === 'soulmate'
